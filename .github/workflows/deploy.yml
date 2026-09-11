@@ -1,25 +1,74 @@
-deploy:
-  name: Deploy to S3
-  runs-on: ubuntu-latest
-  needs: build
+name: Deploy Website to AWS
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+on:
+  push:
+    branches:
+      - main
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::699061129313:role/GitHubActionsDevOpsCICDRole
-        role-session-name: GitHubActionsSession
-        aws-region: ap-south-1
+permissions:
+  id-token: write
+  contents: read
 
-    - name: Deploy website to S3
-      run: |
-        aws s3 sync . s3://${{ secrets.S3_BUCKET }} \
-          --exclude ".git/*" \
-          --exclude ".github/*" \
-          --exclude "README.md"
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
 
-    - name: Deployment successful
-      run: echo "Website deployed successfully!"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate website files
+        run: |
+          test -f index.html
+          test -f style.css
+          test -f script.js
+          echo "All required files are present."
+
+  build:
+    name: Build / Package
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create deployment package
+        run: |
+          mkdir build
+          cp index.html build/
+          cp style.css build/
+          cp script.js build/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-build
+          path: build/
+
+  deploy:
+    name: Deploy to S3
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::699061129313:role/GitHubActionsDevOpsCICDRole
+          role-session-name: GitHubActionsSession
+          aws-region: ap-south-1
+
+      - name: Deploy website to S3
+        run: |
+          aws s3 sync . s3://${{ secrets.S3_BUCKET }} \
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "README.md"
+
+      - name: Deployment successful
+        run: echo "Website deployed successfully!"
